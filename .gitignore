@@ -1,0 +1,8 @@
+.cache/
+.java/
+.snakemake/
+benchmarks/
+data/
+emseq/
+logs/
+results/

@@ -1,0 +1,7 @@
+name: bismark
+channels:
+    - conda-forge
+    - bioconda
+dependencies:
+    - bismark=0.25.1
+    - perl-gd=2.83

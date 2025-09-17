@@ -1,0 +1,7 @@
+name: methylkit
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - bioconductor-methylkit=1.32.0
