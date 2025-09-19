@@ -15,5 +15,5 @@ rule all:
     input:
         rules.multiqc.output,
         rules.multiqc_after_trim.output,
-        expand(rules.bismark_nucleotide_coverage_report.output.coverage_report, sample = SAMPLES)
+        expand(rules.bismark_processing_report.output.processing_report, sample = SAMPLES)
         

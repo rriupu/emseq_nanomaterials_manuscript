@@ -42,62 +42,63 @@ rule methylation_extraction:
         2> {log}
         """
 
-rule bismark_nucleotide_coverage_report:
-    """
-    
-    """
-    input:
-        aligned_reads = rules.mapping.output.aligned_deduplicated_reads,
-        genome_fasta = rules.get_genome.output.genome_fasta
-    output:
-        coverage_report = os.path.join(config["output_dir"], "aligned_reads", "{sample}", "{sample}.nucleotide_stats.txt")
-    log:
-        os.path.join("logs", "{sample}", "{sample}_bismark_nucleotide_coverage_report.log")
-    benchmark:
-        os.path.join("benchmarks", "{sample}", "{sample}_bismark_nucleotide_coverage_report.txt")
-    threads: 1
-    conda:
-        "../envs/mapping.yaml"
-    shell:
-        """
-        bam2nuc \
-            --dir $(dirname {input.aligned_reads}) \
-            --genome_folder $(realpath $(dirname {input.genome_fasta})) \
-            {input.aligned_reads} \
-        2> {log}
-        """
-
-# rule bismark_processing_report:
+# rule bismark_nucleotide_coverage_report:
 #     """
+    
 #     """
 #     input:
-#         nucleotide_report = rules.bismark_nucleotide_coverage_report.output.coverage_report
+#         aligned_reads = rules.mapping.output.aligned_deduplicated_reads,
+#         genome_fasta = rules.get_genome.output.genome_fasta
 #     output:
-#         processing_report = os.path.join(config["output_dir"], "bismark_reports", "{sample}", "{sample}_processing_report.")
-#     params:
-#         alignment_report = os.path.join(config["output_dir"], "aligned_reads", "{sample}", "{sample}_R1_001_val_1_bismark_bt2_PE_report.txt"),
-#         dedup_report = os.path.join(config["output_dir"], "aligned_reads", "{sample}", "{sample}_R1_001_val_1_bismark_bt2_pe.deduplication_report.txt"),
-#         splitting_report = os.path.join(config["output_dir"], "methylation_extraction", "{sample}", "{sample}_R1_001_val_1_bismark_bt2_pe.deduplicated_splitting_report.txt"),
-#         mbias_report = os.path.join(config["output_dir"], "methylation_extraction", "{sample}", "{sample}_R1_001_val_1_bismark_bt2_pe.deduplicated.M-bias.txt")
+#         coverage_report = os.path.join(config["output_dir"], "aligned_reads", "{sample}", "{sample}.nucleotide_stats.txt")
 #     log:
-#         os.path.join(config["logs_dir"], "{sample}", "{sample}_bismark_processing_report.log")
+#         os.path.join("logs", "{sample}", "{sample}_bismark_nucleotide_coverage_report.log")
 #     benchmark:
-#         os.path.join(config["benchmarks_dir"], "{sample}", "{sample}_bismark_processing_report.txt")
-#     threads: 1 
+#         os.path.join("benchmarks", "{sample}", "{sample}_bismark_nucleotide_coverage_report.txt")
+#     threads: 1
 #     conda:
 #         "../envs/mapping.yaml"
 #     shell:
 #         """
-#         bismark2report \
-#             --output $(basename {output.processing_report}) \
-#             --dir $(dirname {input.coverage_report}) \
-#             --alignment_report {params.alignment_report} \
-#             --dedup_report {params.dedup_report} \
-#             --splitting_report {params.splitting_report} \
-#             --mbias_report {params.mbias_report} \
-#             --nucleotide_report {input.nucleotide_report} \
+#         bam2nuc \
+#             --dir $(dirname {input.aligned_reads}) \
+#             --genome_folder $(realpath $(dirname {input.genome_fasta})) \
+#             {input.aligned_reads} \
 #         2> {log}
 #         """
+
+rule bismark_processing_report:
+    """
+    """
+    input:
+        aligned_reads = rules.bismark_mapping.output.aligned_deduplicated_reads
+        # nucleotide_report = rules.bismark_nucleotide_coverage_report.output.coverage_report
+    output:
+        processing_report = os.path.join(config["output_dir"], "bismark_reports", "{sample}", "{sample}_processing_report.html")
+    params:
+        alignment_report = os.path.join(config["output_dir"], "aligned_reads", "{sample}", "{sample}_R1_001_val_1_bismark_bt2_PE_report.txt"),
+        dedup_report = os.path.join(config["output_dir"], "aligned_reads", "{sample}", "{sample}_R1_001_val_1_bismark_bt2_pe.deduplication_report.txt"),
+        splitting_report = os.path.join(config["output_dir"], "methylation_extraction", "{sample}", "{sample}_R1_001_val_1_bismark_bt2_pe.deduplicated_splitting_report.txt"),
+        mbias_report = os.path.join(config["output_dir"], "methylation_extraction", "{sample}", "{sample}_R1_001_val_1_bismark_bt2_pe.deduplicated.M-bias.txt")
+    log:
+        os.path.join(config["logs_dir"], "{sample}", "{sample}_bismark_processing_report.log")
+    benchmark:
+        os.path.join(config["benchmarks_dir"], "{sample}", "{sample}_bismark_processing_report.txt")
+    threads: 1 
+    conda:
+        "../envs/mapping.yaml"
+    shell:
+        """
+        bismark2report \
+            --output $(basename {output.processing_report}) \
+            --dir $(dirname {output.processing_report}) \
+            --alignment_report {params.alignment_report} \
+            --dedup_report {params.dedup_report} \
+            --splitting_report {params.splitting_report} \
+            --mbias_report {params.mbias_report} \
+            --nucleotide_report none \
+        2> {log}
+        """
 
 # rule bismark_summary_report:
 #     """
