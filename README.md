@@ -1,5 +1,3 @@
-# emseq_nanomaterials_manuscript
-
 # Snakemake pipeline for the EM-seq analysis in MACRAME
 
 This repository contains the Snakmake pipeline for the EM-seq data analysis for the MACRAME article published in: DOI.
