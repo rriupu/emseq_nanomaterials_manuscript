@@ -15,5 +15,6 @@ rule all:
     input:
         rules.multiqc.output,
         rules.multiqc_after_trim.output,
-        expand(rules.bismark_processing_report.output.processing_report, sample = SAMPLES)
+        expand(rules.bismark_processing_report.output.processing_report, sample = SAMPLES),
+        rules.methylKit.output.sample_correlation_plot
         
