@@ -8,7 +8,9 @@
 ## --------------- ##
 
 library(methylKit)
+library(genomation)
 library(optparse)
+library(pheatmap)
 
 ## -------------- ##
 ## Read arguments ##
@@ -18,10 +20,6 @@ option_list = list(
 
   make_option(c("-i", "--input_dir"), type = "character", default = NULL, 
               help = "Path to the input directory containing all the called methylation files from Bismark (Mandatory).", 
-              metavar = "character"),
-  
-  make_option(c("-d", "--methylkit_dbdir"), type = "character", default = NULL, 
-              help = "Path to the directory where the methylKit database will be built (Mandatory). ", 
               metavar = "character"),
   
   make_option(c("-o", "--output_dir"), type = "character", default = NULL, 
@@ -37,10 +35,9 @@ opt = parse_args(opt_parser);
 
 input_dir = opt$input_dir
 output_dir = opt$output_dir
-methylkit_dbdir = opt$methylkit_dbdir
+methylkit_dbdir = file.path(output_dir, "methylkit_database")
 threads = opt$threads
 
-dir.create(output_dir, recursive = T, showWarnings = F)
 dir.create(methylkit_dbdir, recursive = T, showWarnings = F)
 
 ## ---------------- ##
@@ -88,10 +85,6 @@ meths = methRead(
     mincov = 6
 )
 
-# Filter out PCR biases and normalize
-meths_filtered = filterByCoverage(meths, hi.count = 100)
-meths_norm = normalizeCoverage(meths_filtered)
-
 ## --------------------------------- ##
 ## Plot CpG percentages and coverage ##
 ## --------------------------------- ##
@@ -108,32 +101,63 @@ for (i in 1:length(sample_ids_ls)) {
 }
 dev.off()
 
+## ----------------------------------------- ## 
+## Filtering of PCR biases and normalization ##
+## ----------------------------------------- ##
+
+meths_filtered = filterByCoverage(meths, lo.count = 6, hi.count = 100)
+meths_norm = normalizeCoverage(meths_filtered)
+
+pdf(file.path(output_dir, "CpG_methylation_percentage_histograms_normalized.pdf"))
+for (i in 1:length(sample_ids_ls)) {
+    getMethylationStats(meths_norm[[i]], plot = TRUE, both.strands = FALSE)
+}
+dev.off()
+
+pdf(file.path(output_dir, "CpG_coverage_normalized.pdf"))
+for (i in 1:length(sample_ids_ls)) {
+    getCoverageStats(meths_norm[[i]], plot = TRUE, both.strands = FALSE)
+}
+dev.off()
+
 ## --------------------------------------------------- ##
 ## Unite all methylation datasets for further analysis ##
 ## --------------------------------------------------- ##
 
-meths_united = unite(meths, destrand = T, save.db = F, mc.cores = threads)
+meths_united = unite(
+    meths_norm,
+    destrand = T,
+    mc.cores = threads,
+    save.db = TRUE,
+    dbdir = methylkit_dbdir,
+    suffix = "united_filtered_normalized"
+)
 
 # Save united dataset
-makeMethylDB(meths_united, dbdir = methylkit_dbdir)
+# makeMethylDB(meths_united, dbdir = methylkit_dbdir)
 
 ## ---------------- ##
 ## Data exploration ##
 ## ---------------- ##
 
 # Sample-sample correlation
+meths_perc = percMethylation(meths_norm)
+meths_cor = cor(meths_perc)
+heatmap_cor = pheatmap(meths_cor)
+ggsave(file.path(outputDir, "correlation_heatmap.pdf"), heatmap_cor)
+
 pdf(file.path(output_dir, "sample_correlation.pdf"), height = 20, width = 20)
 getCorrelation(meths_united, plot = TRUE)
 dev.off()
 
 # PCA
-pdf(file.path(output_dir, "PCA.pdf"))
+pdf(file.path(output_dir, "PCA_normalized.pdf"))
 PCASamples(meths_united, screeplot = TRUE)
 PCASamples(meths_united)
 dev.off()
 
 # Hierarchical clustering
-pdf(file.path(output_dir, "clustering.pdf"))
+pdf(file.path(output_dir, "clustering_normalized.pdf"))
 clusterSamples(meths_united, dist = "correlation", method = "ward", plot = TRUE)
 dev.off()
 
@@ -146,10 +170,28 @@ parts = strsplit(meths_united@sample.ids, "_")
 donors = sapply(parts, function(x) {return(x[length(x)])})
 treatments = sapply(parts, "[[", 1)
 
-sample_annotation = data.frame(
-    donor = factor(donors),
-    treatment = factor(treatments)
+covariates = data.frame(
+    donor = factor(donors)
 )
+
+diff_meth = calculateDiffMeth(
+    meths_united,
+    covariates = covariates,
+    mc.cores = 15
+)
+
+# Genomation
+refseq_annots = readTranscriptFeatures("refseq_hg38.bed")
+diff_ann = annotateWithGeneParts(as(diff_meth, "GRanges"), refseq_annots)
+plotTargetAnnotation(
+    diff_ann,
+    precedence = TRUE,
+    main = "Differential methylation annotation"
+)
+
+promoters = regionCounts(meths_norm, refseq_annots$promoters)
+
+
 
 as = assocComp(mBase = meths_united, sampleAnnotation = sample_annotation)
 meths_united_no_donor_effect = removeComp(meths_united, comp = 1:4)
@@ -158,6 +200,12 @@ pdf(file.path(output_dir, "PCA_no_donor_effect.pdf"))
 PCASamples(meths_united_no_donor_effect, screeplot = TRUE)
 PCASamples(meths_united_no_donor_effect)
 dev.off()
+
+# Elana
+
+
+
+
 
 
 # pdf("clustering2_destranded.pdf")
