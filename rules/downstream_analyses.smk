@@ -14,8 +14,8 @@ rule methylKit:
     benchmark:
         os.path.join(config["benchmarks_dir"], "{sample}", "{sample}_methylKit_data_exploration.txt")
     threads: 10
-    conda:
-        "../envs/methylkit.yaml"
+    container:
+        "docker://rriu/methylkit:1.33.3"
     shell:
         """
         Rscript {params.rscript} \
