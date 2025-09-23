@@ -279,6 +279,6 @@ dev.off()
 # TO DOs
 # Investigate other possibilities to remove donor effect?
 # For each pairwise comparison, get differentially methylated positions and draw a heatmap
+# Write results to table
 # Analysis on CHH and CHG
 # Plot with methylation distribution around TSS (i.e. https://www.researchgate.net/figure/Methylation-density-across-transcription-start-sites-TSS-regions-of-all-B-cinerea_fig1_305809128)
-# 

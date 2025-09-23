@@ -4,11 +4,9 @@ rule methylKit:
     input:
         expand(rules.methylation_extraction.output.cytosine_report, sample = SAMPLES)
     output:
-        sample_correlation_plot = os.path.join(config["output_dir"], "methylKit", "data_exploration", "sample_correlation.pdf"),
-        pca_plot = os.path.join(config["output_dir"], "methylKit", "data_exploration", "PCA.pdf"),
-        clustering_plot = os.path.join(config["output_dir"], "methylKit", "data_exploration", "clustering.pdf")
+        sample_correlation_plot = os.path.join(config["output_dir"], "methylKit", "data_exploration", "sample_correlation.pdf")
     params:
-        rscript = os.path.join(config["scripts_dir"], "methylkit.R"),
+        rscript = os.path.join("scripts", "methylkit.R"),
         input_dir = os.path.join(config["output_dir"], "methylation_extraction"),
         output_dir = os.path.join(config["output_dir"], "methylKit", "data_exploration")
     log:
