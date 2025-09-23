@@ -11,6 +11,13 @@ library(methylKit)
 library(genomation)
 library(optparse)
 library(pheatmap)
+library(ComplexHeatmap)
+
+## --------- ##
+## Functions ##
+## --------- ##
+
+source("scripts/methylkit_utils.R")
 
 ## -------------- ##
 ## Read arguments ##
@@ -141,9 +148,29 @@ meths_united = unite(
 ## ---------------- ##
 
 # Sample-sample correlation
-meths_perc = percMethylation(meths_norm)
+meths_perc = percMethylation(meths_united)
 meths_cor = cor(meths_perc)
-heatmap_cor = pheatmap(meths_cor)
+heatmap = Heatmap(
+    meths_cor,
+    show_row_names = T,
+    column_names_gp = grid::gpar(fontsize = 8),
+    row_names_gp = grid::gpar(fontsize = 8),
+    top_annotation = HeatmapAnnotation(
+        Treatment = treatments,
+        Donor = paste("Donor", rep(1:4, 7), sep = " ")
+    )
+)
+pdf(file.path(output_dir, "correlation_heatmap.pdf"), width = 14)
+draw(heatmap)
+dev.off()
+
+pca = prcomp(t(meths_perc))
+pca_df = as.data.frame(pca$x)
+pca_df$donor = rep(1:4, 7)
+pca_df$donor = factor(pca_df$donor)
+pca_plot = ggplot(pca_df, aes(x = PC1, y = PC2, color = donor)) + geom_point()
+ggsave(file.path(output_dir, "pca_ggplot.pdf"), pca_plot)
+
 ggsave(file.path(outputDir, "correlation_heatmap.pdf"), heatmap_cor)
 
 pdf(file.path(output_dir, "sample_correlation.pdf"), height = 20, width = 20)
@@ -162,83 +189,96 @@ clusterSamples(meths_united, dist = "correlation", method = "ward", plot = TRUE)
 dev.off()
 
 
+## --------------------- ##
+## Differential analysis ##
+## --------------------- ##
 
+groups = 0:6
+pairs = combn(groups, 2, simplify = FALSE)
+pairwise_results = list()
 
+for (pair in pairs) {
+  g1 = pair[1]
+  g2 = pair[2]
 
+  group1_name = treatments_mapping$Treatment[treatments_mapping$number == g1]
+  group2_name = treatments_mapping$Treatment[treatments_mapping$number == g2]
+  
+  cat(sprintf("Testing treatment groups %s vs %s\n", group1_name, group2_name))
+  
+  res = test_two_treatments(meths_united, group1 = g1, group2 = g2, threads = threads, qvalue = 0.1)
+  
+  # Name results with pair info for easy access
+  pair_name = paste0(group1_name, "_vs_", group2_name)
+  pairwise_results[[pair_name]] = res
+}
 
-parts = strsplit(meths_united@sample.ids, "_")
-donors = sapply(parts, function(x) {return(x[length(x)])})
-treatments = sapply(parts, "[[", 1)
+# Plot number of differentially methylated CpGs per comparison
+sig_counts = sapply(pairwise_results, function(res) {
+  df = as.data.frame(res)
+  sum(df$qvalue < 0.05 & abs(df$meth.diff) >= 10)
+})
 
-covariates = data.frame(
-    donor = factor(donors)
+# Convert to data frame for plotting
+counts_df = data.frame(
+  comparison = names(sig_counts),
+  sig_sites = sig_counts
 )
 
-diff_meth = calculateDiffMeth(
-    meths_united,
-    covariates = covariates,
-    mc.cores = 15
-)
+# Bar plot
+p = ggplot(counts_df, aes(x = comparison, y = sig_sites, fill = comparison)) +
+    geom_bar(stat = "identity", show.legend = FALSE) +
+    labs(
+        title = "Number of Significant Differential Methylation Sites",
+        x = "Pairwise Comparison",
+        y = "Significant Sites (q < 0.05 & |meth.diff| >= 10%)") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(file.path(output_dir, "number_significant_diff_methylation_sites_per_comparison.pdf"), p)
+
+## --------------------- ##
+## Annotation of results ##
+## --------------------- ##
 
 # Genomation
 refseq_annots = readTranscriptFeatures("refseq_hg38.bed")
-diff_ann = annotateWithGeneParts(as(diff_meth, "GRanges"), refseq_annots)
-plotTargetAnnotation(
-    diff_ann,
-    precedence = TRUE,
-    main = "Differential methylation annotation"
+annot_pairwise_results = lapply(
+    pairwise_results, function(x) {
+        annotateWithGeneParts(as(x, "GRanges"), refseq_annots)
+    }
 )
 
-promoters = regionCounts(meths_norm, refseq_annots$promoters)
+annot_stats = lapply(
+    annot_pairwise_results,
+    function(x) {
+        getTargetAnnotationStats(x, percentage = TRUE, precedence = TRUE)
+    }
+)
 
+pdf(file.path(output_dir, "diff_meth_annotations.pdf"))
+for(i in 1:length(annot_pairwise_results)) {
+    
+    comparison = pairs[[i]]
+    g1 = pair[1]
+    g2 = pair[2]
 
+    group1_name = treatments_mapping$Treatment[treatments_mapping$number == g1]
+    group2_name = treatments_mapping$Treatment[treatments_mapping$number == g2]
 
-as = assocComp(mBase = meths_united, sampleAnnotation = sample_annotation)
-meths_united_no_donor_effect = removeComp(meths_united, comp = 1:4)
+    title = paste0(group1_name, "_vs_", group2_name)
 
-pdf(file.path(output_dir, "PCA_no_donor_effect.pdf"))
-PCASamples(meths_united_no_donor_effect, screeplot = TRUE)
-PCASamples(meths_united_no_donor_effect)
+    plotTargetAnnotation(
+        annot_pairwise_results[[i]],
+        precedence = TRUE,
+        main = title
+    )
+
+}
 dev.off()
 
-# Elana
-
-
-
-
-
-
-# pdf("clustering2_destranded.pdf")
-# clusterSamples(meths_united_no_donor_effect, dist = "correlation", method = "ward", plot = TRUE)
-# dev.off()
-
-# mat = percMethylation(meths_united)
-# mat = mat / 100
-# write.table(mat, "percMethyl.tsv", sep = "\t", col.names = T, row.names = F, quote = F)
-
-# library(ComBatMet)
-
-# perc_meth = read.table("percMethyl.tsv", sep = "\t", header = T)
-
-# samples = colnames(perc_meth)
-# donors = rep(1:4, 7)
-# treatments = c(
-#     rep(0, 4),
-#     rep(1, 4),
-#     rep(2, 4),
-#     rep(2, 4),
-#     rep(3, 4),
-#     rep(4, 4),
-#     rep(5, 4)
-# ) 
-
-# adj_bv_mat = ComBat_met(perc_meth, batch = donors, group = treatments, full_mod = TRUE)
-
-# write.table(adj_bv_mat, "adj_percMeth.tsv", sep = "\t", col.names = T, row.names = F, quote = F)
-
-# perc_meth = read.table("adj_percMeth.tsv", sep = "\t", header = T)
-# reconstructed_meth_after_combatmet = reconstruct(perc_meth, meths_united)
-
-# pdf("clustering_combatmet.pdf")
-# clusterSamples(reconstructed_meth_after_combatmet, dist = "correlation", method = "ward", plot = TRUE)
-# dev.off()
+# TO DOs
+# Investigate other possibilities to remove donor effect?
+# For each pairwise comparison, get differentially methylated positions and draw a heatmap
+# Analysis on CHH and CHG
+# Plot with methylation distribution around TSS (i.e. https://www.researchgate.net/figure/Methylation-density-across-transcription-start-sites-TSS-regions-of-all-B-cinerea_fig1_305809128)
+# 
